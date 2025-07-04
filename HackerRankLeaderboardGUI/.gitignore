@@ -131,6 +131,7 @@ dmypy.json
 # Project specific
 # Generated Excel files
 Leaderboards/
+../Leaderboards/
 *.xlsx
 *.xls
 
