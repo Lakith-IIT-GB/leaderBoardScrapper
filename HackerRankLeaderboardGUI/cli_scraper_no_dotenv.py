@@ -47,48 +47,7 @@ class HackerRankLeaderboardCLI:
         self.offset_limit = int(config['OFFSET_LIMIT'])
         self.max_offset = int(config['MAX_OFFSET'])
 
-    def display_menu(self):
-        print("\n" + "="*60)
-        print("          HACKERRANK LEADERBOARD SCRAPER")
-        print("="*60)
-        print("1. Generate Excel Sheets from Contest IDs")
-        print("2. Combine Existing Excel Sheets")
-        print("0. Exit")
-        print("="*60)
 
-    def get_user_choice(self):
-        while True:
-            try:
-                choice = input("\nEnter your choice (0/1/2): ").strip()
-                if choice in ['0', '1', '2']:
-                    return int(choice)
-                else:
-                    print("Invalid choice! Please enter 0, 1, or 2.")
-            except KeyboardInterrupt:
-                print("\n\nExiting...")
-                return 0
-            except Exception:
-                print("Invalid input! Please enter 0, 1, or 2.")
-
-    def get_contest_ids(self):
-        print("\nEnter HackerRank Contest IDs:")
-        print("(Separate multiple IDs with commas)")
-        print("Example: contest1, contest2, contest3")
-        
-        while True:
-            inp = input("\nContest IDs: ").strip()
-            if not inp:
-                print("Please enter at least one contest ID!")
-                continue
-            
-            try:
-                contest_ids = [id.strip() for id in inp.split(',') if id.strip()]
-                if not contest_ids:
-                    print("No valid contest IDs entered! Please try again.")
-                    continue
-                return contest_ids
-            except Exception as e:
-                print(f"Error parsing input: {e}. Please try again.")
 
     def generateExcelSheet(self, name, df):
         """Generate Excel sheet with formatting"""
@@ -237,153 +196,21 @@ class HackerRankLeaderboardCLI:
         df_total = df_total[columns]
         self.generateExcelSheet('TotalHackerrankLeaderBoard', df_total)
 
-    def get_file_path(self, title, file_type="Excel"):
-        """Get file path from user input"""
-        print(f"\n{title}")
-        print("Enter the full path to the file:")
-        
-        while True:
-            file_path = input("File path: ").strip().strip('"').strip("'")
-            if not file_path:
-                print("Please enter a valid file path!")
-                continue
-            
-            path_obj = Path(file_path)
-            if not path_obj.exists():
-                print(f"File not found: {file_path}")
-                print("Please check the path and try again.")
-                continue
-            
-            if file_type == "Excel" and not file_path.lower().endswith('.xlsx'):
-                print("Please select an Excel (.xlsx) file!")
-                continue
-            
-            return file_path
-
-    def combine_excel_sheets(self):
-        """Combine student data with HackerRank leaderboard"""
-        print("\n" + "="*60)
-        print("           COMBINE EXCEL SHEETS")
-        print("="*60)
-        print("\nInstructions:")
-        print("1. Provide Student Excel sheet with:")
-        print("   - Option A: 'Roll number' and 'Hackerrank' columns")
-        print("   - Option B: Just 'Hackerrank' usernames (auto-generates User_001, etc.)")
-        print("   - Option C: Usernames in first column (any column name)")
-        print("2. Provide HackerRank Leaderboard Excel sheet")
-        print("   (typically 'TotalHackerrankLeaderBoard.xlsx')")
-
-        try:
-            # Get student file
-            student_file = self.get_file_path("📁 Select Student Data Excel File")
-            
-            # Get HackerRank file
-            hackerrank_file = self.get_file_path("📁 Select HackerRank Leaderboard Excel File")
-            
-            print("\nProcessing files...")
-            
-            # Read student data file
-            print("📖 Reading student data file...")
-            student_df = pd.read_excel(student_file)
-            
-            # Check if Roll number column exists, if not create a placeholder
-            if 'Roll number' not in student_df.columns and 'Hackerrank' in student_df.columns:
-                # Only usernames provided, create sequential roll numbers
-                student_df['Roll number'] = [f"User_{i+1:03d}" for i in range(len(student_df))]
-                student_df = student_df[['Roll number', 'Hackerrank']].copy()
-            elif 'Roll number' in student_df.columns and 'Hackerrank' in student_df.columns:
-                # Both columns exist
-                student_df = student_df[['Roll number', 'Hackerrank']].copy()
-            else:
-                # Try to detect column names
-                cols = student_df.columns.tolist()
-                if len(cols) >= 1:
-                    # Assume first column is usernames
-                    student_df.columns = ['Hackerrank'] + [f'Col_{i}' for i in range(1, len(cols))]
-                    student_df['Roll number'] = [f"User_{i+1:03d}" for i in range(len(student_df))]
-                    student_df = student_df[['Roll number', 'Hackerrank']].copy()
-                else:
-                    raise ValueError("Could not identify username column in student file")
-
-            student_df['Hackerrank'] = student_df['Hackerrank'].str.strip().str.lstrip('@').str.lower()
-
-            # Read Hackerrank leaderboard file
-            print("📖 Reading HackerRank leaderboard file...")
-            hackerrank_df = pd.read_excel(hackerrank_file)
-
-            # If there's a Rank column, drop it (we'll recreate it)
-            if 'Rank' in hackerrank_df.columns:
-                hackerrank_df = hackerrank_df.drop('Rank', axis=1)
-
-            # Clean data and convert to lowercase for matching
-            print("🔄 Processing and matching data...")
-            student_df['Hackerrank'] = student_df['Hackerrank'].str.strip()
-            hackerrank_df['Name_lower'] = hackerrank_df['Name'].str.strip().str.lower()
-
-            # Merge dataframes using lowercase versions for matching
-            result_df = pd.merge(
-                hackerrank_df,
-                student_df,
-                left_on='Name_lower',
-                right_on='Hackerrank',
-                how='left'
-            )
-
-            # Drop the temporary and redundant columns
-            result_df = result_df.drop(['Hackerrank', 'Name_lower'], axis=1)
-
-            # Sort by Total Score if it exists, otherwise by Score
-            sort_column = 'Total Score' if 'Total Score' in result_df.columns else 'Score'
-            result_df = result_df.sort_values(sort_column, ascending=False)
-
-            # Add Rank column and reorder columns
-            result_df.insert(0, 'Rank', range(1, len(result_df) + 1))
-
-            # Reorder columns to have Rank, Roll number, Name at the start
-            cols = result_df.columns.tolist()
-            cols.remove('Rank')
-            cols.remove('Roll number')
-            cols.remove('Name')
-            final_cols = ['Rank', 'Roll number', 'Name'] + cols
-            result_df = result_df[final_cols]
-
-            # Generate Excel file
-            print("📝 Generating combined Excel file...")
-            output_path = Path('Leaderboards/CombinedLeaderboard.xlsx')
-            with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
-                result_df.to_excel(writer, index=False, sheet_name='Sheet1')
-                self.apply_excel_formatting(writer.sheets['Sheet1'], result_df)
-
-            print("\n✅ Combined Excel sheet generated successfully!")
-            print(f"📁 File saved: {output_path.absolute()}")
-            print(f"📊 Total entries: {len(result_df)}")
-            print(f"👤 Matched entries (with Roll numbers): {result_df['Roll number'].notna().sum()}")
-            print(f"❓ Unmatched entries: {result_df['Roll number'].isna().sum()}")
-
-        except Exception as e:
-            print(f"\n❌ Error occurred: {str(e)}")
-
     def run(self):
         """Main application loop"""
+        print("\n" + "="*60)
+        print("          HACKERRANK LEADERBOARD SCRAPER")
+        print("="*60)
         print(f"🔧 Configuration loaded:")
         print(f"  - Search keyword: {self.search_keyword}")
         print(f"  - Request timeout: {self.request_timeout}s")
         print(f"  - Offset limit: {self.offset_limit}")
         
-        while True:
-            self.display_menu()
-            choice = self.get_user_choice()
-            
-            if choice == 0:
-                print("\n👋 Goodbye!")
-                break
-            elif choice == 1:
-                contest_ids = self.get_contest_ids()
-                self.generate_sheets(contest_ids)
-            elif choice == 2:
-                self.combine_excel_sheets()
-            
-            input("\nPress Enter to continue...")
+        print(f"\n📊 Processing contest: coderally-6-0-training-weeks")
+        contest_ids = ["coderally-6-0-training-weeks"]
+        self.generate_sheets(contest_ids)
+        
+        print(f"\n✅ Process completed! Check the Leaderboards folder for results.")
 
 
 if __name__ == "__main__":
