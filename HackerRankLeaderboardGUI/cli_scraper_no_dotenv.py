@@ -53,12 +53,20 @@ class HackerRankLeaderboardCLI:
         """Generate Excel sheet with formatting"""
         # Sort the DataFrame
         if name == 'TotalHackerrankLeaderBoard' or name == 'CombinedLeaderboard':
-            df = df.sort_values(by='Total Score', ascending=False)
+            sort_cols = ['Total Score', 'Time'] if 'Time' in df.columns else ['Total Score']
+            sort_order = [False, True] if 'Time' in df.columns else [False]
+            df = df.sort_values(by=sort_cols, ascending=sort_order)
         else:
-            df = df.sort_values(by='Score', ascending=False)
+            sort_cols = ['Score', 'Time'] if 'Time' in df.columns else ['Score']
+            sort_order = [False, True] if 'Time' in df.columns else [False]
+            df = df.sort_values(by=sort_cols, ascending=sort_order)
 
         # Add rank after sorting
         df.insert(0, 'Rank', range(1, len(df) + 1))
+
+        # Remove raw 'Time' column from Excel output, keep 'Time (hh:mm:ss)'
+        if 'Time' in df.columns and 'Time (hh:mm:ss)' in df.columns:
+            df = df.drop(columns=['Time'])
 
         # Create Excel file
         filepath = Path(f'Leaderboards/{name}.xlsx')
@@ -118,6 +126,7 @@ class HackerRankLeaderboardCLI:
 
     def fetch_hackerrank_data(self, tracker_name):
         """Fetch data from HackerRank API"""
+        import datetime
         data = []
         headers = {"User-agent": self.user_agent}
 
@@ -134,9 +143,21 @@ class HackerRankLeaderboardCLI:
                     break
 
                 for item in json_data['models']:
+                    # Convert time_taken (seconds) to hh:mm:ss
+                    time_taken = item.get('time_taken', None)
+                    if time_taken is not None:
+                        try:
+                            time_taken = int(time_taken)
+                            time_str = str(datetime.timedelta(seconds=time_taken))
+                        except Exception:
+                            time_str = ''
+                    else:
+                        time_str = ''
                     data.append({
                         'Name': item['hacker'],
-                        'Score': item['score']
+                        'Score': item['score'],
+                        'Time': time_taken if time_taken is not None else float('inf'),  # for sorting
+                        'Time (hh:mm:ss)': time_str
                     })
 
                 print(f"    Fetched {len(data)} entries so far...")
@@ -146,7 +167,11 @@ class HackerRankLeaderboardCLI:
                 return None
 
         print(f"  ✓ Total entries fetched: {len(data)}")
-        return pd.DataFrame(data) if data else None
+        if data:
+            df = pd.DataFrame(data)
+            return df
+        else:
+            return None
 
     def generate_sheets(self, tracker_names):
         """Generate Excel sheets for given contest IDs"""
